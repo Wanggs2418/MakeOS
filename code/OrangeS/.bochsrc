@@ -1,0 +1,25 @@
+#########################################################
+# Configuration file for Bochs
+#########################################################
+# 1.Bochs 模拟器使用的内存：32MB
+megs: 32
+
+# 2.ROM images 名称
+romimage: file=/usr/share/bochs/BIOS-bochs-latest
+vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
+
+# 3.设置Bochs所使用的磁盘
+# 命名规则，floppya,floppyb...
+floppya: image="f1_44M.img", status=inserted
+
+# 4.选择启动盘符
+#boot: disk    # 从硬盘启动
+boot: floppy # 默认从软盘启动
+
+# 5.设置日志文件输出
+log: bochs.out
+
+# 6.开启或关闭某些功能
+mouse: enabled=0
+keyboard: keymap=/usr/share/bochs/keymaps/x11-pc-us.map
+####################Config End###########################
