@@ -28,9 +28,11 @@ times 60 dq 0
 ; 选择子
 SELECTOR_CODE equ (0x0001<<3) + TI_GDT + RPL0
 SELECTOR_DATA equ (0x0002<<3) + TI_GDT + RPL0
-SELECTOR_VIDEO equ (0x0003+<<3) + TI_GDT + RPL0
+SELECTOR_VIDEO equ (0x0003<<3) + TI_GDT + RPL0
 
 ; GDT指针，前16位GDT界限，后32位GDT起始地址
+; 前 16 位界限值告诉CPU置显示的段描述符个数-即(界限值+1)/8字节
+; 段描述符大小为8字节，即64位
 ; dw-16位，dd-32位
 gdt_ptr dw GDT_LIMIT
         dd GDT_BASE
@@ -97,5 +99,7 @@ p_mode_start:
     mov esp, LOADER_STACK_TOP
     mov ax, SELECTOR_VIDEO
     mov gs, ax
-
+    
     mov byte [gs:160], 'p'
+
+    jmp $
