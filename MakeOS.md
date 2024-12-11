@@ -1,6 +1,6 @@
 # MakeOS
 
-> [Code Index](https://github.com/yyu/osfs00) | [Linux 发行版](https://www.linuxmi.com/)
+> [Code Index](https://github.com/yyu/osfs00) | [Linux 发行版](https://www.linuxmi.com/) | [VsCode icon meanings](https://code.visualstudio.com/docs/editor/intellisense#_types-of-completions)
 
 ### 说明
 
@@ -560,7 +560,7 @@ PCI Express, PCIe 总线，串行设备，传输频率快，PCI-Peripheral Compo
 ### 0.12 汇编语法
 
 ```assembly
-# 将内容单元的内容送入ax
+# 将内存单元的内容送入ax
 mov ax, [bx]
 ```
 
@@ -755,6 +755,14 @@ trace-reg on
 
 ### 2.2 描述符
 
+#### 段描述符
+
+**段式内存管理（线性地址） > 分页式内存管理**
+
+为了访问内存的安全性，同事保证内存的访问方式仍然位：段基址+偏移。使用段描述符（8字节）来定义一个内存段，如数据段，栈段等。段描述符存放在内存中，共同组成全局描述符表（GDT），段描述符相当于数组中的一个元素。
+
+<img src="os_img/01.jpg" style="zoom:67%;" />
+
 #### GD全局描述符
 
 > Global Descriptor，GD
@@ -776,9 +784,9 @@ trace-reg on
 - `D/B` (代码段或栈段) 字段，指示段内偏移地址及操作数的大小；
 - `G` 段，Granularity，粒度，指定段界限的单位大小；
 
-#### GDT全局描述符表
+#### GDTR全局描述符表寄存器
 
-> Global Descriptor Table，GDT
+> Global Descriptor Table Register，GDTR
 
 一个段描述符定义一个内存段，段描述符放在全局描述符表，并通过选择子提供的下标在 GDT 中索引 GD。
 
@@ -970,6 +978,8 @@ ARDS(Address Range Descriptor Structure)地址范围描述符，用于储存中�
 
 为了充分利用物理内存，需要将线性地址映射到任意的物理地址上，解除线性地址到物理地址的一一对应关系。而这就产生了分页管理内存的机制。
 
+分页机制建立在分段机制之上，分页机制下的进程先经过**逻辑分段**，在进程自己的 4GB 虚拟空间中分配内存段空间，而后将段在逻辑上拆分为已页为单位的小内存块，并建立和物理内存页的映射关系。
+
 #### 一级页表
 
 分页的原理：将连续的线性地址与任意的物理地址相关联。对于 IA32 架构，分页机制建立在分段机制上。使用分页机制后，段部件输出的为线性地址，即虚拟地址，而虚拟地址对应的物理地址需要在页表中查找。
@@ -981,13 +991,13 @@ ARDS(Address Range Descriptor Structure)地址范围描述符，用于储存中�
 
 内存块大小为 1B 时，4GB 空间划分为 4G 个内存块，即 4G 个页表项。而每个页表存储 32 位地址，需要 4B 内存，故在内存块大小为 1B 时，页表要占用 4G×4B=16GB 内存。
 
-由于 32 位地址表示 4GB 空间，因此将 32 地址划分为-内存块大小×内存块数量。官方设定的内存块大小 $2^{12}=4$KB，对应的内存块数量 $2^{20}=1$M 个。
+由于 32 位地址表示 **4GB 空间**，因此将 32 地址划分为-内存块大小×内存块数量。官方设定的内存块大小 $2^{12}=4$KB，对应的内存块数量 $2^{20}=1$M 个。
 
 - 页是地址空间的计量单位，只要是 4KB 地址空间都称为一页；
 - 先找到对应的物理页，$2^{20}$ 可表示全部物理页。在物理页内偏移，$2^{12}$ 可全部表示；
 - **一个页表数组，$2^{20}$ 个页表项，每个页表项 4B 大小；**
 
-<img src="os_img/14.png" style="zoom:80%;" />
+<img src="os_img/14.png" style="zoom:60%;" />
 
 **地址转换过程**
 
@@ -995,7 +1005,7 @@ ARDS(Address Range Descriptor Structure)地址范围描述符，用于储存中�
 2. 线性地址的高 20 位索引页表项，每个页表项 4B。**页表项物理地址** = 20 位索引值×4 + `CR3` 中页表基址；
 3. 从页表项中获取到**物理页地址**，线性地址的低 12 位则对应**页内偏移地址**；
 
-实际中，CPU 集成了专门的硬件模块机型转换，称为**页部件**，给出一个线性地址，自动在页表中检索物理地址。
+实际中，CPU 集成了专门的硬件模块进行转换，称为**页部件**，给出一个线性地址，自动在页表中检索物理地址。
 
 <img src="os_img/15.png" style="zoom:67%;" />
 
@@ -1009,21 +1019,30 @@ ARDS(Address Range Descriptor Structure)地址范围描述符，用于储存中�
   - 页目录项大小同页表项一样，即描述物理地址对应的 4 字节;
   - **1 个页目录项对应 1 个页表，1 个页表中有 1024 个页表项，对应 1K×4KB=4MB 物理内存**
 
-<img src="os_img/17.png" style="zoom:60%;" /><img src="os_img/16.png" style="zoom:50%;" />
+<img src="os_img/17.png" style="zoom:50%;" /><img src="os_img/16.png" style="zoom:50%;" />
 
-**二级页表虚拟地址到物理地址的转换**
+#### 虚拟地址到物理地址的转换
 
-这种转换的工作借助硬件自动转换。
+这种转换的工作借助硬件自动转换，**32 位虚拟地址的各位说明（一个表项对应 4B）**：
 
 1. 高 10 位在页目录表中定位页目录项—PDE，1 个页目录表对应 $2^{10} = 1024$ 个 PDE；
-2. 中间 10 位在页表中定义页表项—PTE，1 个页表对应 $2^{10} = 1024$ 个 PTE；
+2. 中间 10 位在页表中定位页表项—PTE，1 个页表对应 $2^{10} = 1024$ 个 PTE；
 3. 后 12 位对应标准页的页内偏移地址，标准页为 4KB 大小；
+
+**获得页目录项 PDE**：页目录表的基址 + 高 10 位页目录表的中的偏移  >> PDE；
+
+**获得页表项 PTE**：页表的物理基址(20位即可表示出32位的物理地址) + 中 10 位页表的中的偏移偏移  >> PTE；
+
+- **由 PTE 得到实际物理地址 + 后 12 位的偏移地址；**
+
+- **虚拟地址提供偏移量，CR3寄存器，PDE 和 PTE 分别提供基址；**
+- **CR3 提供页目录项基址，PDE 提供页表基址，PTE 提供物理内存块基址；**
 
 <img src="os_img/18.png" style="zoom:70%;" />
 
 #### 页表项和CR
 
-标准页的大小为 4KB，物理地址为 4K 的倍数，所以低 12 位为 0。只需 20 位即可表示 32 位物理地址，其余 12 位用于设置属性。
+**标准页的大小为 4KB，物理地址为 4K 的倍数，所以低 12 位为 0。只需 20 位即可表示 32 位物理地址**，其余 12 位用于设置属性。
 
 <img src="os_img/19.png" style="zoom:70%;" />
 
@@ -1052,25 +1071,280 @@ CR3 用于储存页表物理地址，称为**页目录基址寄存器**（Page D
 
 **Bochs 模拟页表的物理地址设定**
 
-<img src="os_img/21.png" style="zoom:80%;" />
+<img src="os_img/21.png" style="zoom:70%;" />
+
+**`loader.s` 文件内容内存设定说明**
+
+<img src="os_img/23.png" style="zoom:50%;" />
+
+#### 虚拟地址访问页表
+
+页表是动态的数据结构，根据内存的需求动态增减。
+
+**虚拟地址的高 10 位 | 虚拟地址的中间 10 位 | 虚拟地址的低 12 位**
+
+从 CR3 寄存器中获得页目录表的物理地址 >>>
+
+虚拟地址的高 10 位× 4 作为偏移量找到对应的 PDE，从 PDE 读出页表的物理地址 >>>
+
+虚拟地址的中间 10 位× 4 作为页表中的偏移量寻址 PTE，从 PTE 中读出页框的物理地址 >>>
+
+虚拟地址的低 12 位作为该物理页框的偏移量 >>> 完成虚拟地址到物理地址的映射
+
+**开两把锁拿到页框的基址 + 虚拟低 12 位（页大小 4KB，4GB 内存，索引个数位 1M<二级索引实现 1M>）**
+
+#### 快表TLB
+
+> Translation Lookaside Buffer
+
+处理器准备一个高速缓存，专门存放虚拟地址页框与物理地址页框的映射关系。
+
+TLB 的条目是虚拟地址高 20 位到物理地址高 20 位的映射。TLB 是页表的缓存，需要时时刷新，但是随时更新的话则又需要查询映射关系，因此最终 TLB 由开发人员手动维护。
 
 
 
+### 3.3 加载内核(C语言)
+
+不同语言在不同的层级，各层级有不同的思维方式。相比于 C 语言，汇编语言在更低的层级上，主要用于完成宏观需求的具体步骤。
+
+C 语言程序生成过程：先将源程序变成汇编代码，再由汇编代码生成二进制的目标文件，最后将目标文件链接成二进制可执行文件。
+
+```cmd
+# -c 仅编译，汇编，不链接
+gcc -c -o main.o main.c
+# file命令检查main.o文件状态
+file main.o
+# 链接指定生成可执行文件的起始虚拟地址
+# -Ttext ADDRESS Set address of .text section，指定虚拟起始地址
+# -e ADDRESS, --entry ADDRESS Set start address，指定程序的起始地址
+# main函数为入口地址
+ld main.o -Ttext 0xc0001500 -e main -o main.bin
+
+# 直接生成可执行文件
+gcc -o main_temp.bin main.c
+
+# 对于二者符号个数, -l 表示行数
+nm main.bin | wc -l
+nm main_temp.bin | wc -l
+```
+
+目标文件 `main.o` 是重定位文件(relocatable)，符号（变量名，函数名）的地址未确定，一律在链接阶段重定位。
+
+#### 程序头设置
+
+应用程序位于外存中，使用时才需调入内存。在程序中，程序头（文件头）用来描述程序的布局信息，即元数据。
+
+<img src="os_img/24.png" style="zoom:80%;" />
+
+将程序读入到内存后，从程序头中读入程序入口地址，而后跳转到入口地址执行程序。
+
+#### ELF 文件
+
+> Executable and Linkable Format，可执行链接格式
+
+<img src="os_img/25.png" style="zoom:67%;" />
+
+- 待重定位文件（relocatable file），源文件仅编译，未进行链接；
+- 共享目标文件（shared object file），动态链接库；
+- 可执行文件（executable file），编译链接后可直接执行的文件；
+
+#### ELF 头和程序头
+
+**ELF 头**
+
+`e_ident[5]` ：指定编码格式
+
+- `1`-小端字节序，LSB（最低有效字节），最低字节存放在最低字节处
+- `2`-大端字节序，MSB（最高有效字节）
+
+**程序头表条目的数据结构**
+
+`struct Elf32_Phdr` 描述磁盘程序中的一个段；
+
+段描述符描述物理内存中的内存段；
+
+<img src="os_img/26.png" style="zoom:80%;" />
+
+```c
+// elf header中的数据类型
+// elf32_half：2字节 无符号中等大小整数
+// elf32_word：4字节 无符号大整数
+// elf32_addr：4字节 无符号程序运行地址
+// elf32_off：4字节 无符号文件偏移量
+#include "elf.h"
+
+// elf header结构
+// 52字节
+struct Elf32_Ehdr {
+    // 16字节大小的数组
+    unsigned char e_ident[16];
+    // 2字节，指定文件类型2-可执行
+    Elf32_Half e_type;
+    // 2字节，文件运行的平台
+    Elf32_Half e_machine;
+    Elf32_Word e_version;
+    Elf32_Addr e_entry;
+    // program header table程序头表在文件内的字节偏移量
+    Elf32_Off e_phoff;
+    // section header table节头表在文件内的字节偏移量
+    Elf32_Off e_shoff;
+    Elf32_Word e_flags;
+    // elf header的字节大小
+    Elf32_Half e_ehsize;
+    // 程序头表中每个条目(entry)的字节大小（描述段信息的数据结构大小）
+    Elf32_Half e_phentsize;
+    // 程序头表中的条目数量,即段的数量
+    Elf32_Half e_phnum;
+    // 节头表中每个条目的字节大小（描述节信息的数据结构大小）
+    Elf32_Half e_shentsize;
+    // 节头表中的条目数量，即节的数量
+    Elf32_Half e_shnum;
+    Elf32_Half e_shstrndx;
+};
+
+// program segment header
+// 描述位于磁盘上程序的一个段
+// 共32字节
+typedef struct {
+    // 4字节，段类型
+    Elf32_Word p_type;
+    // 段在文件内的偏移
+    Elf32_Off p_offset;
+    // 段在内存中的起始虚拟地址
+    Elf32_Addr p_vaddr;
+    Elf32_Addr p_paddr;
+    // 段在文件中的大小
+    Elf32_Word p_filesz;
+    // 段在内存中的大小
+    Elf32_Word p_memsz;
+    Elf32_Word p_flags;
+    Elf32_Word p_align;
+} Elf32_Phdr;
+```
+
+#### 自定义映射的内存地址
+
+内核文件 90% 由 C 语言编写，通过 `loader` 将内核从硬盘中加载到内存中。
+
+**MBR 跳转 > Loader > 加载内核kernel**
+
+MBR.bin：加载的起始地址 0x7C00 ，硬盘第 0 扇区，512字节；
+
+Loader.bin：加载的起始地址 0x900 ，硬盘第 2 扇区，根据其大小占用 2，3，4扇区
+
+kernel.bin：第 9 扇区开始，自定义**加载的起始地址为  0x70000**，0x900+2000(预估 Loader.bin 大小) = 0x10d0。最终选择 **0x1500 作为内核映像**的入口地址，对应虚拟地址 **0xc0001500**（3GB-4GB）。
+
+<img src="os_img/27.png" style="zoom:67%;" />
+
+#### 内核映射到内存
+
+**Loader 将 kernel 加载到缓冲区**
+
+1. 将硬盘中的内核拷贝到内存（不运行）；
+
+   内核加载到内存后，loader 通过分析其 `elf` 结构将内核展开到新的位置。内核在内存中有两份，一份是 `elf` 格式的原文件 `kernel.bin`，另一份是 loader 解析 `kernel.bin` （`elf` 格式）后在内存中生成的内核映像，即将程序中各种段 `segment` 复制到内存中，**此时的映像文件才是真正的内核**。
+
+   内核文件 `kernel.bin` 放在高地址区，内核映像放置在低地址区，后续映像可以覆盖内核原文件。
+
+2. 初始化内核；
+
+   将 `kernel.bin` 中的段复制到内核文件中。拷贝起始地址  0x70000，**内核代码段入口地址 0x1500，对应虚拟地址为 0xc000_1500，起始地址为 0xc000_1000，0xc000_1000~0xc000_1500 为文件头，非代码。**
+   
+   内核起始物理地址 `0x1500`，大小预估为 70KB，设定的栈底地址为 `0x9f000`，此时 `0x9f000~0x1500` 约有 630KB 空间。
+
+<img src="os_img/29.png" style="zoom:80%;" />
+
+```assembly
+; --------------------------------------------------
+; 将kernel.bin中的segment复制到编译的地址
+; KERNEL_BIN_BASE_ADDR equ 0x70000拷贝的地址
+; 获取program header内存拷贝地址，数量，大小
+kernel_init:
+    xor eax, eax    ;异或操作，相同为0，不同为1
+    xor ebx, ebx    ;program header地址
+    xor ecx, ecx    ;program header数量
+    xor edx, edx    ;program header大小
+    mov ebx, [KERNEL_BIN_BASE_ADDR + 28]    ; 偏移28字节，e_phoff对应program header偏移的偏移量(0x34-52字节)
+    add ebx, KERNEL_BIN_BASE_ADDR
+    mov ecx, [KERNEL_BIN_BASE_ADDR + 44]    ; 偏移44字节，e_phnum对应program header数量（2字节)
+    mov dx, [KERNEL_BIN_BASE_ADDR + 42]     ; elf偏移42字节,e_phentsize对应program header大小(0x20-32字节)
+
+; 遍历各个段
+; ebx:program header在文件内的起始地址
+; 进栈顺序：段大小，源地址，目的地址，栈顶填充，栈顶在低位
+; 栈从上往下发展，栈底用不上
+.each_segemnt:
+    cmp byte [ebx + 0], PT_NULL ; 偏移0字节，段类型，p_type
+    je .PTNULL                  ; 相等,program header未使用
+    push dword [ebx + 16]       ; 偏移16字节，段在文件中大小，p_filesz
+    mov eax, [ebx + 4]          ; 偏移4字节，段在文件内的偏移量，p_offset
+    add eax, KERNEL_BIN_BASE_ADDR
+    push eax                    ; 源地址
+    push dword [ebx + 8]        ;目的地址，p_addr，段在内存中的起始虚拟地址
+    call mem_cpy                ; 完成段的映像
+    add esp, 12                 ; 清理压入的3个参数:大小，源地址，目的地址
+
+.PTNULL:
+    add ebx, edx                ;edx为pd大小，指向下一个program header
+    loop .each_segemnt
+    ret
+
+; 将拷贝到内存中的内核展开为映像文件
+; 输入：栈中参数(dst, src, size)
+; 输入：无
+.mem_cpy:
+    cld
+    push ebp            ; ebp的值入栈备份
+    mov ebp, esp        ; esp栈顶指针，有数入栈时，esp地址变小
+    push ecx
+    mov edi, [ebp+8]    ; 目的地址
+    mov esi, [ebp+12]   ; 源地址
+    mov ecx, [ebp+16]   ; 段大小
+    rep movsb
+
+    pop ecx
+    pop ebp
+    ret
+```
+
+1.  ELF Header 中：获取程序头表地址（拷贝后的内存地址 = 基址 + 偏移量），一个程序头代表一个段；
+2.  ELF Header 中：获取程序头的数量，即段的数量；
+3. 根据 program header 的内存拷贝地址和 program header 数量，结合 Program Header 的信息，遍历每个段；
+
+**栈是向下拓展的，通过 push 指令压栈，栈指针 esp 的值越来越小。**
+
+栈从上往下发展，栈底（高地址）一般用不上
+
+<img src="os_img/28.png" style="zoom:67%;" />
+
+#### 数据块复制指令
+
+**复制数据：movs[bwd] 指令族，重复执行指令 rep，方向指令 cld,std**
+
+`move string-movs`，本质上复制字节数据，将 `DS:ESI` 地址处的 1 字节搬到 `ES:EDI` 地址。
+
+- `movsb`：复制 1 字节
+- ` movsw`：复制 2 字节
+- `movsd`：复制 4 字节
+
+`rep` 按照 `ecx` 中的次数重复执行指令。
+
+`cld,std` 控制重复执行复制命令时，`esi,edi` 地址的递增（`cld`），递减（`std`）
+
+- `cld`：clean direction，`eflags` 寄存器中方向标志位 `DF=0` ，`esi,edi` 自动加上搬用的字节大小；
+- `std`：set direction，`eflags` 寄存器中方向标志位 `DF=1` ，**高地址向低地址方向发展**，`esi,edi` 自动减去搬用的字节大小；
+
+CPU 自动根据`DF` 设置的标志位进行自增/自减。
+
+- 其中 `movsb,movsw,movsd` 同时包含 `esi,edi` 的自增/减；
+- `insb,insw,insd` 从端口读入数据到内存的目的地址，只包含 `edi` 的自增/减；
+- `outsb,outsw,outsd` 从内存的源数据写入到端口的目的地址，只包含 `esi` 的自增/减；
+- `lodsb,lodsw,lodsd` 将内存中的源数据加载到寄存器 `al,ax,eax` ，只包含 `esi`；
+- `stosb,stosw,stosd` 将寄存器 `al,ax,eax` 的内容写入到内存中目的地址，只包含 `edi`；
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+### 3.4 特权级
 
 
 

@@ -83,7 +83,7 @@ make target
 
 如果 `make` 后没有跟 target，则会按照默认的 target 文件去运行，一般是 `makefile` 文件的首个 `target`
 
-<img src="make_img/01.png" style="zoom: 67%;" />
+<img src="makefile_img/01.png" style="zoom: 67%;" />
 
 如 `make j2` 一次允许 2 个作业，特别适合多核 CPU 的情况。
 
